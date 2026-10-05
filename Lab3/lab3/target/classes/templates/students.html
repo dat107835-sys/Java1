@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý sinh viên</title>
+    <style>
+        :root { --ink: #18323b; --accent: #0b8f67; --line: #d7e2df; --soft: #eef7f3; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; color: var(--ink); background: #f5f8f7; }
+        main { max-width: 1120px; margin: 32px auto; padding: 0 20px; }
+        header { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin-bottom: 24px; }
+        h1 { margin: 0 0 6px; color: var(--accent); font-size: 30px; }
+        .subtitle { margin: 0; color: #60716e; }
+        .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+        input { border: 1px solid var(--line); border-radius: 5px; padding: 10px 12px; font-size: 14px; }
+        input:focus { outline: 2px solid #b8e3d2; border-color: var(--accent); }
+        button { border: 0; border-radius: 5px; padding: 10px 15px; background: var(--accent); color: white; cursor: pointer; font-weight: 600; }
+        button.secondary { background: #52716a; }
+        button.danger { background: #c74747; }
+        button:hover { filter: brightness(.93); }
+        .form, .table-wrap { background: white; border: 1px solid var(--line); border-radius: 7px; padding: 18px; margin-bottom: 20px; }
+        .form h2 { margin: 0 0 14px; font-size: 18px; }
+        .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .form-actions { margin-top: 13px; display: flex; gap: 8px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border-bottom: 1px solid var(--line); padding: 11px 9px; text-align: left; font-size: 14px; }
+        th { background: var(--soft); color: #24634f; }
+        td.actions { white-space: nowrap; }
+        td.actions button { padding: 7px 10px; font-size: 12px; }
+        .empty { text-align: center; color: #71817e; padding: 28px; }
+        @media (max-width: 760px) { header { display: block; } .grid { grid-template-columns: 1fr 1fr; } .table-wrap { overflow-x: auto; } table { min-width: 760px; } }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <div>
+            <h1>Quản lý sinh viên</h1>
+            <p class="subtitle">CRUD API Spring Boot + SQL Server</p>
+        </div>
+        <button class="danger" onclick="deleteAllStudents()">Xóa tất cả</button>
+    </header>
+
+    <section class="form">
+        <h2 id="form-title">Thêm sinh viên</h2>
+        <form id="student-form">
+            <div class="grid">
+                <input id="studentCode" placeholder="Mã sinh viên" required>
+                <input id="fullName" placeholder="Họ và tên" required>
+                <input id="email" type="email" placeholder="Email" required>
+                <input id="phone" placeholder="Số điện thoại">
+                <input id="className" placeholder="Tên lớp">
+            </div>
+            <div class="form-actions">
+                <button type="submit">Lưu sinh viên</button>
+                <button type="button" class="secondary" onclick="resetForm()">Làm mới</button>
+            </div>
+        </form>
+    </section>
+
+    <div class="toolbar">
+        <input id="keyword" placeholder="Tìm theo mã hoặc họ tên" oninput="loadStudents()">
+        <button class="secondary" onclick="loadStudents()">Tìm kiếm</button>
+    </div>
+
+    <section class="table-wrap">
+        <table>
+            <thead><tr><th>Mã SV</th><th>Họ tên</th><th>Email</th><th>Điện thoại</th><th>Lớp</th><th>Thao tác</th></tr></thead>
+            <tbody id="student-list"><tr><td colspan="6" class="empty">Đang tải dữ liệu...</td></tr></tbody>
+        </table>
+    </section>
+</main>
+<script>
+    let editingId = null;
+    const form = document.getElementById('student-form');
+    const formTitle = document.getElementById('form-title');
+    const studentCode = document.getElementById('studentCode');
+    const fullName = document.getElementById('fullName');
+    const email = document.getElementById('email');
+    const phone = document.getElementById('phone');
+    const className = document.getElementById('className');
+
+    async function loadStudents() {
+        const keyword = document.getElementById('keyword').value.trim();
+        const response = await fetch('/api/students' + (keyword ? '?keyword=' + encodeURIComponent(keyword) : ''));
+        const students = await response.json();
+        const list = document.getElementById('student-list');
+        list.innerHTML = students.length ? students.map(student => `
+            <tr><td>${escapeHtml(student.studentCode)}</td><td>${escapeHtml(student.fullName)}</td>
+            <td>${escapeHtml(student.email)}</td><td>${escapeHtml(student.phone || '')}</td>
+            <td>${escapeHtml(student.className || '')}</td><td class="actions">
+            <button type="button" onclick='editStudent(${JSON.stringify(student)})'>Sửa</button>
+            <button type="button" class="danger" onclick="deleteStudent('${student.id}')">Xóa</button></td></tr>`).join('')
+            : '<tr><td colspan="6" class="empty">Chưa có sinh viên phù hợp.</td></tr>';
+    }
+
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const student = {
+            studentCode: studentCode.value.trim(),
+            fullName: fullName.value.trim(),
+            email: email.value.trim(),
+            phone: phone.value.trim(),
+            className: className.value.trim()
+        };
+        const url = editingId ? '/api/students/' + editingId : '/api/students';
+        const method = editingId ? 'PUT' : 'POST';
+        await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(student) });
+        resetForm();
+        loadStudents();
+    });
+
+    function editStudent(student) {
+        editingId = student.id;
+        formTitle.textContent = 'Cập nhật sinh viên';
+        studentCode.value = student.studentCode;
+        fullName.value = student.fullName;
+        email.value = student.email;
+        phone.value = student.phone || '';
+        className.value = student.className || '';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deleteStudent(id) {
+        if (confirm('Xóa sinh viên này?')) {
+            await fetch('/api/students/' + id, { method: 'DELETE' });
+            loadStudents();
+        }
+    }
+
+    async function deleteAllStudents() {
+        if (confirm('Xóa toàn bộ sinh viên?')) {
+            await fetch('/api/students', { method: 'DELETE' });
+            loadStudents();
+        }
+    }
+
+    function resetForm() {
+        editingId = null;
+        form.reset();
+        formTitle.textContent = 'Thêm sinh viên';
+    }
+
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>'"]/g, character => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            "'": '&#39;',
+            '"': '&quot;'
+        }[character]));
+    }
+
+    loadStudents();
+</script>
+</body>
+</html>
